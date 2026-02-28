@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab Admin | Materials Testing Lab</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div class="auth-wrap" id="authView">
+  <div class="auth-card">
+    <div class="auth-card__logo">
+      <span class="nav__logo-mark">MTL</span>
+      <span>Lab Admin</span>
+    </div>
+    <h2>Admin Sign In</h2>
+    <p class="auth-card__sub">For authorized lab staff only.</p>
+    <div class="auth-error" id="loginError"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" required placeholder="admin@lab.com" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn btn--primary btn--full" id="loginBtn">Sign In</button>
+    </form>
+  </div>
+</div>
+
+<!-- ===== ADMIN APP ===== -->
+<div class="app-layout" id="appView" style="display:none">
+  <header class="app-topbar">
+    <div class="app-topbar__brand">
+      <span class="nav__logo-mark">MTL</span>
+      <span>Lab Admin</span>
+    </div>
+    <div class="app-topbar__actions">
+      <button class="btn btn--outline btn--sm" id="tabProjects"   onclick="setTab('projects')">Projects</button>
+      <button class="btn btn--outline btn--sm" id="tabSamples"    onclick="setTab('samples')">Samples</button>
+      <button class="btn btn--outline btn--sm" id="tabResults"    onclick="setTab('results')">Results</button>
+      <button class="btn btn--outline btn--sm" id="tabQuotes"     onclick="setTab('quotes')">Quotes</button>
+      <button class="btn btn--outline btn--sm" id="signOutBtn">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="loading" id="adminLoading">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- ===== PROJECTS TAB ===== -->
+    <div id="tabProjects_content" style="display:none">
+      <div class="page-head">
+        <div><h1>Projects</h1><p>Manage client projects.</p></div>
+        <button class="btn btn--primary" onclick="openPanel('project')">+ New Project</button>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Project Name</th><th>Number</th><th>Client</th><th>Location</th><th>Created</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="projectsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== SAMPLES TAB ===== -->
+    <div id="tabSamples_content" style="display:none">
+      <div class="page-head">
+        <div><h1>Samples</h1><p>All submitted samples across all projects.</p></div>
+        <button class="btn btn--primary" onclick="openPanel('sample')">+ Log Sample</button>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Sample ID</th><th>Project</th><th>Material</th><th>Location</th><th>Received</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="samplesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== RESULTS TAB ===== -->
+    <div id="tabResults_content" style="display:none">
+      <div class="page-head">
+        <div><h1>Test Results</h1><p>Enter results and upload report PDFs.</p></div>
+        <button class="btn btn--primary" onclick="openPanel('result')">+ Add Result</button>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Sample</th><th>Test</th><th>Standard</th><th>Result</th><th>Pass/Fail</th><th>Tested</th><th>Report</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== QUOTES TAB ===== -->
+    <div id="tabQuotes_content" style="display:none">
+      <div class="page-head">
+        <div><h1>Quote Requests</h1><p>Submissions from the public contact form.</p></div>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Name</th><th>Company</th><th>Email</th><th>Project</th><th>Tests</th><th>Received</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="quotesBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ===== SLIDE-IN PANELS ===== -->
+
+<!-- Project Panel -->
+<div class="panel-overlay" id="projectPanel">
+  <div class="panel">
+    <div class="panel__header">
+      <h2 id="projectPanelTitle">New Project</h2>
+      <button class="panel__close" onclick="closePanel('project')">&times;</button>
+    </div>
+    <form id="projectForm">
+      <input type="hidden" id="projectId" />
+      <div class="form-group">
+        <label for="projName">Project Name *</label>
+        <input type="text" id="projName" required placeholder="e.g. Highway 42 Widening" />
+      </div>
+      <div class="form-group">
+        <label for="projNumber">Project Number</label>
+        <input type="text" id="projNumber" placeholder="e.g. 2024-087" />
+      </div>
+      <div class="form-group">
+        <label for="projClient">Client *</label>
+        <select id="projClient" required>
+          <option value="">— Select client —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="projLocation">Location</label>
+        <input type="text" id="projLocation" placeholder="City, State or address" />
+      </div>
+      <div class="form-group">
+        <label for="projEngineer">Engineer of Record</label>
+        <input type="text" id="projEngineer" placeholder="Name of responsible engineer" />
+      </div>
+      <div class="form-group">
+        <label for="projNotes">Notes</label>
+        <textarea id="projNotes" rows="3" placeholder="Special instructions, spec references, etc."></textarea>
+      </div>
+      <button type="submit" class="btn btn--primary btn--full">Save Project</button>
+    </form>
+  </div>
+</div>
+
+<!-- Sample Panel -->
+<div class="panel-overlay" id="samplePanel">
+  <div class="panel">
+    <div class="panel__header">
+      <h2 id="samplePanelTitle">Log Sample</h2>
+      <button class="panel__close" onclick="closePanel('sample')">&times;</button>
+    </div>
+    <form id="sampleForm">
+      <input type="hidden" id="sampleId" />
+      <div class="form-group">
+        <label for="sampleProject">Project *</label>
+        <select id="sampleProject" required>
+          <option value="">— Select project —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="sampleLabel">Sample ID / Label *</label>
+        <input type="text" id="sampleLabel" required placeholder="e.g. S-01, Core-3B" />
+      </div>
+      <div class="form-group">
+        <label for="sampleMaterial">Material Type *</label>
+        <select id="sampleMaterial" required>
+          <option value="">— Select —</option>
+          <option value="soil">Soil</option>
+          <option value="concrete">Concrete</option>
+          <option value="asphalt">Asphalt</option>
+          <option value="aggregate">Aggregate</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="sampleDesc">Description</label>
+        <input type="text" id="sampleDesc" placeholder="e.g. Subgrade soil, Sta. 12+50" />
+      </div>
+      <div class="form-group">
+        <label for="sampleLocation">Location / Depth / Lift</label>
+        <input type="text" id="sampleLocation" placeholder="e.g. Sta. 12+50, Depth 0-2 ft" />
+      </div>
+      <div class="form-group">
+        <label for="sampleCollDate">Collection Date</label>
+        <input type="date" id="sampleCollDate" />
+      </div>
+      <div class="form-group">
+        <label for="sampleSubmittedBy">Submitted By</label>
+        <input type="text" id="sampleSubmittedBy" placeholder="Field technician or contractor name" />
+      </div>
+      <div class="form-group">
+        <label for="sampleStatus">Status</label>
+        <select id="sampleStatus">
+          <option value="received">Received</option>
+          <option value="in-progress">In Progress</option>
+          <option value="complete">Complete</option>
+          <option value="hold">Hold</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn--primary btn--full">Save Sample</button>
+    </form>
+  </div>
+</div>
+
+<!-- Result Panel -->
+<div class="panel-overlay" id="resultPanel">
+  <div class="panel">
+    <div class="panel__header">
+      <h2 id="resultPanelTitle">Add Test Result</h2>
+      <button class="panel__close" onclick="closePanel('result')">&times;</button>
+    </div>
+    <form id="resultForm">
+      <input type="hidden" id="resultId" />
+      <div class="form-group">
+        <label for="resultSample">Sample *</label>
+        <select id="resultSample" required>
+          <option value="">— Select sample —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="resultTestName">Test Name *</label>
+        <input type="text" id="resultTestName" required placeholder="e.g. Standard Proctor Compaction" list="testNameSuggestions" />
+        <datalist id="testNameSuggestions">
+          <option value="Standard Proctor Compaction">
+          <option value="Modified Proctor Compaction">
+          <option value="Soil Classification">
+          <option value="Particle Size Analysis">
+          <option value="Atterberg Limits">
+          <option value="Moisture Content">
+          <option value="California Bearing Ratio (CBR)">
+          <option value="Consolidation">
+          <option value="Permeability">
+          <option value="Specific Gravity of Soil Solids">
+          <option value="Compressive Strength (Cylinder)">
+          <option value="Flexural Strength (Beam)">
+          <option value="Slump">
+          <option value="Air Content">
+          <option value="Unit Weight">
+          <option value="Bulk Specific Gravity">
+          <option value="Maximum Theoretical Specific Gravity">
+          <option value="Asphalt Content by Ignition">
+          <option value="Marshall Stability and Flow">
+          <option value="In-Place Density (Core)">
+          <option value="Sieve Analysis">
+          <option value="Los Angeles Abrasion">
+          <option value="Specific Gravity and Absorption">
+          <option value="Soundness">
+          <option value="Sand Equivalent">
+        </datalist>
+      </div>
+      <div class="form-group">
+        <label for="resultStandard">Standard</label>
+        <input type="text" id="resultStandard" placeholder="e.g. ASTM D698" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="resultValue">Result Value</label>
+          <input type="text" id="resultValue" placeholder="e.g. 118.5" />
+        </div>
+        <div class="form-group">
+          <label for="resultUnit">Unit</label>
+          <input type="text" id="resultUnit" placeholder="e.g. pcf, psi, %" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="resultSpec">Spec / Required Value</label>
+          <input type="text" id="resultSpec" placeholder="e.g. ≥ 95% of 120 pcf" />
+        </div>
+        <div class="form-group">
+          <label for="resultPassFail">Pass / Fail</label>
+          <select id="resultPassFail">
+            <option value="n/a">N/A</option>
+            <option value="pass">Pass</option>
+            <option value="fail">Fail</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="resultTestedDate">Tested Date</label>
+          <input type="date" id="resultTestedDate" />
+        </div>
+        <div class="form-group">
+          <label for="resultTech">Technician</label>
+          <input type="text" id="resultTech" placeholder="Initials or name" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="resultNotes">Notes</label>
+        <textarea id="resultNotes" rows="2" placeholder="Any qualifications, observations, or exceptions"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="resultReport">Upload Report (PDF)</label>
+        <input type="file" id="resultReport" accept=".pdf" />
+        <p class="form-note">Optional. Replaces existing file if re-uploaded.</p>
+      </div>
+      <button type="submit" class="btn btn--primary btn--full" id="resultSubmitBtn">Save Result</button>
+    </form>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

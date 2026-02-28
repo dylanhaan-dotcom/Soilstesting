@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Client Portal | Materials Testing Lab</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ===== LOGIN VIEW ===== -->
+<div class="auth-wrap" id="authView">
+  <div class="auth-card">
+    <div class="auth-card__logo">
+      <span class="nav__logo-mark">MTL</span>
+      <span>Client Portal</span>
+    </div>
+    <h2>Sign in to your account</h2>
+    <p class="auth-card__sub">View your samples, test results, and download reports.</p>
+
+    <div class="auth-error" id="loginError"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" name="email" required placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" name="password" required placeholder="••••••••" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn btn--primary btn--full" id="loginBtn">Sign In</button>
+    </form>
+
+    <div class="auth-footer">
+      <a href="#" id="forgotLink">Forgot password?</a>
+      &nbsp;·&nbsp;
+      <a href="#" id="showRegister">Don't have an account? Request access</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RESET PASSWORD VIEW ===== -->
+<div class="auth-wrap" id="resetView" style="display:none">
+  <div class="auth-card">
+    <div class="auth-card__logo">
+      <span class="nav__logo-mark">MTL</span>
+      <span>Client Portal</span>
+    </div>
+    <h2>Reset password</h2>
+    <p class="auth-card__sub">Enter your email and we'll send a reset link.</p>
+    <div class="auth-error" id="resetError"></div>
+    <div class="auth-error" id="resetSuccess" style="background:#dcfce7;border-color:#86efac;color:#166534;"></div>
+    <form id="resetForm">
+      <div class="form-group">
+        <label for="resetEmail">Email</label>
+        <input type="email" id="resetEmail" required placeholder="you@example.com" />
+      </div>
+      <button type="submit" class="btn btn--primary btn--full">Send Reset Link</button>
+    </form>
+    <div class="auth-footer"><a href="#" id="backToLogin">Back to sign in</a></div>
+  </div>
+</div>
+
+<!-- ===== REGISTER VIEW ===== -->
+<div class="auth-wrap" id="registerView" style="display:none">
+  <div class="auth-card">
+    <div class="auth-card__logo">
+      <span class="nav__logo-mark">MTL</span>
+      <span>Client Portal</span>
+    </div>
+    <h2>Request portal access</h2>
+    <p class="auth-card__sub">Create your account. Lab staff will approve access within one business day.</p>
+    <div class="auth-error" id="registerError"></div>
+    <form id="registerForm">
+      <div class="form-group">
+        <label for="regName">Full Name *</label>
+        <input type="text" id="regName" required placeholder="Your full name" />
+      </div>
+      <div class="form-group">
+        <label for="regCompany">Company / Firm</label>
+        <input type="text" id="regCompany" placeholder="Optional" />
+      </div>
+      <div class="form-group">
+        <label for="regEmail">Email *</label>
+        <input type="email" id="regEmail" required placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="regPassword">Password *</label>
+        <input type="password" id="regPassword" required placeholder="Min. 8 characters" autocomplete="new-password" />
+      </div>
+      <button type="submit" class="btn btn--primary btn--full">Create Account</button>
+    </form>
+    <div class="auth-footer"><a href="#" id="backToLogin2">Already have an account? Sign in</a></div>
+  </div>
+</div>
+
+<!-- ===== PORTAL APP ===== -->
+<div class="app-layout" id="appView" style="display:none">
+  <header class="app-topbar">
+    <div class="app-topbar__brand">
+      <span class="nav__logo-mark">MTL</span>
+      <span>Client Portal</span>
+    </div>
+    <div class="app-topbar__actions">
+      <span class="app-topbar__user" id="topbarUser"></span>
+      <a href="../index.html" class="btn btn--outline btn--sm">Main Site</a>
+      <button class="btn btn--outline btn--sm" id="signOutBtn">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- Loading -->
+    <div class="loading" id="portalLoading">
+      <div class="spinner"></div>
+      <p style="color:var(--clr-text-muted);margin-top:.5rem">Loading your data…</p>
+    </div>
+
+    <!-- Content -->
+    <div id="portalContent" style="display:none">
+      <!-- Stats row -->
+      <div class="dash-stats" id="portalStats"></div>
+
+      <!-- Project tabs -->
+      <div class="page-head">
+        <div>
+          <h1>Your Projects &amp; Samples</h1>
+          <p>Click a sample to view detailed test results.</p>
+        </div>
+      </div>
+
+      <div id="projectsContainer"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ===== SAMPLE DETAIL PANEL ===== -->
+<div class="panel-overlay" id="samplePanel">
+  <div class="panel">
+    <div class="panel__header">
+      <h2 id="panelSampleLabel">Sample Detail</h2>
+      <button class="panel__close" id="panelClose">&times;</button>
+    </div>
+    <div id="panelBody"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Supabase CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="portal.js"></script>
+</body>
+</html>
