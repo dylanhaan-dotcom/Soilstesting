@@ -10,8 +10,8 @@
       Supabase SQL Editor to create all required tables
    ===================================================== */
 
-const SUPABASE_URL  = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON = 'YOUR_ANON_PUBLIC_KEY';
+const SUPABASE_URL  = 'https://vwaimgbrxpkberbjlipm.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3YWltZ2JyeHBrYmVyYmpsaXBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyODMyNjYsImV4cCI6MjA4Nzg1OTI2Nn0.O-cecyFcZifVOfTlRvJBbiwEk_7CnsjB9kM8RBbuQ7Q';
 
 // Supabase JS client (loaded via CDN in each HTML file)
 // window.supabase is set by the CDN script before this runs
