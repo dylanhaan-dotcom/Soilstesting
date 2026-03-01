@@ -47,8 +47,8 @@ document.getElementById('loginForm')?.addEventListener('submit', async e => {
   if (error) {
     const el = document.getElementById('loginError');
     el.textContent = error.message; el.classList.add('visible');
-    btn.textContent = 'Sign In'; btn.disabled = false;
   }
+  btn.textContent = 'Sign In'; btn.disabled = false;
 });
 
 document.getElementById('signOutBtn')?.addEventListener('click', async () => {
@@ -68,11 +68,16 @@ db.auth.onAuthStateChange(async (event, session) => {
   }
 
   // Verify admin role
-  const { data: profile } = await db.from('profiles').select('role').eq('id', session.user.id).single();
-  if (!profile || profile.role !== 'admin') {
+  const { data: profile, error: profileError } = await db.from('profiles').select('role').eq('id', session.user.id).single();
+  if (profileError || !profile || profile.role !== 'admin') {
     await db.auth.signOut();
     const el = document.getElementById('loginError');
-    el.textContent = 'Access denied. Admin accounts only.'; el.classList.add('visible');
+    el.textContent = profileError
+      ? 'Could not verify account. Ensure the "profiles" table RLS policy allows users to read their own row.'
+      : 'Access denied. Admin accounts only.';
+    el.classList.add('visible');
+    const btn = document.getElementById('loginBtn');
+    if (btn) { btn.textContent = 'Sign In'; btn.disabled = false; }
     return;
   }
 
