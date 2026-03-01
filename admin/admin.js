@@ -49,39 +49,65 @@ function showLoginError(msg) {
   el.classList.add('visible');
 }
 
+function setLoginStatus(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.style.background = '#eff6ff';
+  el.style.borderColor = '#93c5fd';
+  el.style.color = '#1e40af';
+  el.classList.add('visible');
+}
+
+function clearLoginStatus() {
+  const el = document.getElementById('loginError');
+  el.style.background = '';
+  el.style.borderColor = '';
+  el.style.color = '';
+  el.classList.remove('visible');
+}
+
 document.getElementById('loginForm')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = document.getElementById('loginBtn');
-  const errorEl = document.getElementById('loginError');
-  errorEl.classList.remove('visible');
+  clearLoginStatus();
   btn.textContent = 'Signing in…'; btn.disabled = true;
 
   // Step 1: authenticate
+  setLoginStatus('Step 1/3: Authenticating…');
   const { error: authError } = await db.auth.signInWithPassword({
     email:    document.getElementById('loginEmail').value.trim(),
     password: document.getElementById('loginPassword').value,
   });
   if (authError) {
-    showLoginError(authError.message);
+    showLoginError('Auth failed: ' + authError.message);
     btn.textContent = 'Sign In'; btn.disabled = false;
     return;
   }
 
   // Step 2: verify admin role
-  const { data: { user } } = await db.auth.getUser();
+  setLoginStatus('Step 2/3: Getting user…');
+  const { data: { user }, error: userError } = await db.auth.getUser();
+  if (userError || !user) {
+    showLoginError('Could not get user after login: ' + (userError?.message || 'unknown'));
+    btn.textContent = 'Sign In'; btn.disabled = false;
+    return;
+  }
+
+  setLoginStatus('Step 3/3: Checking role…');
   const { data: profile, error: profileError } = await db.from('profiles')
     .select('role').eq('id', user.id).single();
 
   if (profileError || !profile || profile.role !== 'admin') {
     await db.auth.signOut();
     showLoginError(profileError
-      ? 'Could not verify account. Check that the "profiles" table has an RLS policy allowing users to read their own row.'
-      : 'Access denied. Admin accounts only.');
+      ? 'Role check failed: ' + profileError.message + ' (Code: ' + profileError.code + ')'
+      : 'Access denied. Role found: "' + (profile?.role ?? 'none') + '" — must be "admin".');
     btn.textContent = 'Sign In'; btn.disabled = false;
     return;
   }
 
   // Step 3: show app
+  clearLoginStatus();
   await loadAll();
   setTab('projects');
   showAdminApp();
