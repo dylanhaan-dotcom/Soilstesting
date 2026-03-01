@@ -180,18 +180,55 @@ create policy "quotes: admin update"
   on public.quote_requests for update using (public.is_admin());
 
 -- =====================================================
--- STORAGE — create bucket manually in Supabase Dashboard
--- Storage → New bucket → name: "reports" → Private
--- Then add these policies in Storage → reports → Policies:
---
--- Allow admins to upload:
---   (auth.uid() in (select id from profiles where role='admin'))
--- Allow clients to read their own reports:
---   (auth.uid() in (select p.client_id from projects p
---                   join samples s on s.project_id=p.id
---                   join test_results tr on tr.sample_id=s.id
---                   where tr.report_path = name))
+-- STORAGE — "reports" bucket policies
+-- Prerequisite: create the bucket first:
+--   Storage → New bucket → name: "reports" → Private
+-- Then run the SQL below (or paste into SQL Editor).
 -- =====================================================
+
+-- Admins: full access to the reports bucket
+create policy "reports: admin insert"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'reports'
+    and public.is_admin()
+  );
+
+create policy "reports: admin select"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'reports'
+    and public.is_admin()
+  );
+
+create policy "reports: admin update"
+  on storage.objects for update to authenticated
+  using (
+    bucket_id = 'reports'
+    and public.is_admin()
+  );
+
+create policy "reports: admin delete"
+  on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'reports'
+    and public.is_admin()
+  );
+
+-- Clients: read-only access to reports linked to their own samples
+create policy "reports: client select"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'reports'
+    and exists (
+      select 1
+      from public.test_results tr
+      join public.samples s  on s.id  = tr.sample_id
+      join public.projects p on p.id  = s.project_id
+      where tr.report_path = storage.objects.name
+        and p.client_id    = auth.uid()
+    )
+  );
 
 -- =====================================================
 -- SEED: Create your first admin user
