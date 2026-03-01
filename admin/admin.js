@@ -36,19 +36,55 @@ function statusBadge(status) {
 // =====================================================
 // AUTH
 // =====================================================
+
+function showAdminApp() {
+  document.getElementById('authView').style.display = 'none';
+  document.getElementById('appView').style.display  = '';
+  document.getElementById('adminLoading').style.display = 'none';
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
 document.getElementById('loginForm')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = document.getElementById('loginBtn');
+  const errorEl = document.getElementById('loginError');
+  errorEl.classList.remove('visible');
   btn.textContent = 'Signing in…'; btn.disabled = true;
-  const { error } = await db.auth.signInWithPassword({
+
+  // Step 1: authenticate
+  const { error: authError } = await db.auth.signInWithPassword({
     email:    document.getElementById('loginEmail').value.trim(),
     password: document.getElementById('loginPassword').value,
   });
-  if (error) {
-    const el = document.getElementById('loginError');
-    el.textContent = error.message; el.classList.add('visible');
+  if (authError) {
+    showLoginError(authError.message);
+    btn.textContent = 'Sign In'; btn.disabled = false;
+    return;
   }
-  btn.textContent = 'Sign In'; btn.disabled = false;
+
+  // Step 2: verify admin role
+  const { data: { user } } = await db.auth.getUser();
+  const { data: profile, error: profileError } = await db.from('profiles')
+    .select('role').eq('id', user.id).single();
+
+  if (profileError || !profile || profile.role !== 'admin') {
+    await db.auth.signOut();
+    showLoginError(profileError
+      ? 'Could not verify account. Check that the "profiles" table has an RLS policy allowing users to read their own row.'
+      : 'Access denied. Admin accounts only.');
+    btn.textContent = 'Sign In'; btn.disabled = false;
+    return;
+  }
+
+  // Step 3: show app
+  await loadAll();
+  setTab('projects');
+  showAdminApp();
 });
 
 document.getElementById('signOutBtn')?.addEventListener('click', async () => {
@@ -58,34 +94,24 @@ document.getElementById('signOutBtn')?.addEventListener('click', async () => {
 });
 
 // =====================================================
-// AUTH STATE
+// AUTH STATE — handles page-reload session restoration only
 // =====================================================
 db.auth.onAuthStateChange(async (event, session) => {
-  if (!session?.user) {
-    document.getElementById('authView').style.display = '';
-    document.getElementById('appView').style.display  = 'none';
-    return;
-  }
+  if (event !== 'INITIAL_SESSION') return;
+  if (!session?.user) return; // no saved session — stay on login
 
-  // Verify admin role
-  const { data: profile, error: profileError } = await db.from('profiles').select('role').eq('id', session.user.id).single();
-  if (profileError || !profile || profile.role !== 'admin') {
+  // Restore session: re-verify admin role
+  const { data: profile } = await db.from('profiles')
+    .select('role').eq('id', session.user.id).single();
+
+  if (!profile || profile.role !== 'admin') {
     await db.auth.signOut();
-    const el = document.getElementById('loginError');
-    el.textContent = profileError
-      ? 'Could not verify account. Ensure the "profiles" table RLS policy allows users to read their own row.'
-      : 'Access denied. Admin accounts only.';
-    el.classList.add('visible');
-    const btn = document.getElementById('loginBtn');
-    if (btn) { btn.textContent = 'Sign In'; btn.disabled = false; }
     return;
   }
 
-  document.getElementById('authView').style.display = 'none';
-  document.getElementById('appView').style.display  = '';
-  document.getElementById('adminLoading').style.display = 'none';
   await loadAll();
   setTab('projects');
+  showAdminApp();
 });
 
 // =====================================================
