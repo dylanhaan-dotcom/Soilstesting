@@ -238,7 +238,7 @@ document.getElementById('projectForm')?.addEventListener('submit', async e => {
   toast('Project saved!', 'success');
   closePanel('project');
   await loadAll();
-};
+});
 
 // =====================================================
 // SAMPLES
