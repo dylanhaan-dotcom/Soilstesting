@@ -2,6 +2,12 @@
    Lab Admin — JavaScript
    ===================================================== */
 
+// Diagnostic: confirm JS is loading
+(function() {
+  const sub = document.querySelector('.auth-card__sub');
+  if (sub) sub.textContent = 'JS loaded OK — v4';
+})();
+
 // ---- State ----
 let currentTab = 'projects';
 let allProjects = [];
