@@ -95,7 +95,10 @@
     <div id="tabResults_content" style="display:none">
       <div class="page-head">
         <div><h1>Test Results</h1><p>Enter results and upload report PDFs.</p></div>
-        <button class="btn btn--primary" onclick="openPanel('result')">+ Add Result</button>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn btn--outline" onclick="openProctorPanel()">+ Proctor Test</button>
+          <button class="btn btn--primary" onclick="openPanel('result')">+ Add Result</button>
+        </div>
       </div>
       <div class="data-table-wrap">
         <table class="data-table">
@@ -327,11 +330,93 @@
   </div>
 </div>
 
+<!-- Proctor Test Panel -->
+<div class="panel-overlay" id="proctorPanel">
+  <div class="panel">
+    <div class="panel__header">
+      <h2 id="proctorPanelTitle">New Proctor Test</h2>
+      <button class="panel__close" onclick="closePanel('proctor')">&times;</button>
+    </div>
+    <form id="proctorForm">
+      <input type="hidden" id="proctorId" />
+      <div class="form-group">
+        <label for="proctorSample">Sample *</label>
+        <select id="proctorSample" required>
+          <option value="">— Select sample —</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="proctorStandard">Standard *</label>
+          <select id="proctorStandard" required>
+            <option value="ASTM D698">ASTM D698 (Standard)</option>
+            <option value="ASTM D1557">ASTM D1557 (Modified)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="proctorMoldVol">Mold Volume (ft³)</label>
+          <input type="number" id="proctorMoldVol" step="0.0001" value="0.0333" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="proctorSpecGrav">Specific Gravity (Gs)</label>
+          <input type="number" id="proctorSpecGrav" step="0.01" value="2.65" />
+        </div>
+        <div class="form-group">
+          <label for="proctorDate">Tested Date</label>
+          <input type="date" id="proctorDate" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="proctorTech">Technician</label>
+        <input type="text" id="proctorTech" placeholder="Initials or name" />
+      </div>
+      <div class="form-group">
+        <label>Compaction Data Points *</label>
+        <p class="form-note">Enter at least 3 points. Leave unused rows blank.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.4rem">
+          <thead>
+            <tr style="background:var(--clr-bg-alt)">
+              <th style="padding:.4rem .5rem;text-align:center;border:1px solid var(--clr-border);width:36px">#</th>
+              <th style="padding:.4rem .5rem;border:1px solid var(--clr-border)">Moisture Content (%)</th>
+              <th style="padding:.4rem .5rem;border:1px solid var(--clr-border)">Dry Density (pcf)</th>
+            </tr>
+          </thead>
+          <tbody id="proctorPointsBody"></tbody>
+        </table>
+      </div>
+      <div class="form-group">
+        <label for="proctorNotes">Notes</label>
+        <textarea id="proctorNotes" rows="2" placeholder="Soil description, oversize correction, etc."></textarea>
+      </div>
+      <button type="submit" class="btn btn--primary btn--full" id="proctorSubmitBtn">Save &amp; Generate Curve</button>
+    </form>
+  </div>
+</div>
+
+<!-- Compaction Curve Modal -->
+<div class="panel-overlay" id="curveModal">
+  <div class="panel" style="max-width:680px">
+    <div class="panel__header">
+      <h2 id="curveModalTitle">Compaction Curve</h2>
+      <button class="panel__close" onclick="document.getElementById('curveModal').classList.remove('open')">&times;</button>
+    </div>
+    <div style="position:relative;height:420px;padding:.5rem 0">
+      <canvas id="curveCanvas"></canvas>
+    </div>
+    <p style="font-size:.8rem;color:var(--clr-text-muted);text-align:center;margin-top:.5rem">
+      Dashed red line = Zero Air Voids curve &nbsp;·&nbsp; Green cross = MDD / OMC
+    </p>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script src="../js/supabase-config.js?v=4"></script>
-<script src="admin.js?v=4"></script>
+<script src="admin.js?v=5"></script>
 </body>
 </html>

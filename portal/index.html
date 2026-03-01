@@ -150,8 +150,25 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- Compaction Curve Modal (portal) -->
+<div class="panel-overlay" id="portalCurveModal">
+  <div class="panel" style="max-width:660px">
+    <div class="panel__header">
+      <h2 id="portalCurveTitle">Compaction Curve</h2>
+      <button class="panel__close" onclick="document.getElementById('portalCurveModal').classList.remove('open')">&times;</button>
+    </div>
+    <div style="position:relative;height:400px;padding:.5rem 0">
+      <canvas id="portalCurveCanvas"></canvas>
+    </div>
+    <p style="font-size:.8rem;color:var(--clr-text-muted);text-align:center;margin-top:.5rem">
+      Dashed red line = Zero Air Voids curve &nbsp;·&nbsp; Green cross = MDD / OMC
+    </p>
+  </div>
+</div>
+
 <!-- Supabase CDN -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script src="../js/supabase-config.js"></script>
 <script src="portal.js"></script>
 </body>

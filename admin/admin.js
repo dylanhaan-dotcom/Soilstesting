@@ -334,9 +334,11 @@ async function loadResults() {
         ? `<span class="status ${r.pass_fail==='pass'?'status--complete':'status--hold'}">${r.pass_fail.toUpperCase()}</span>`
         : '—'}</td>
       <td>${formatDate(r.tested_date)}</td>
-      <td>${r.report_path
-        ? `<button class="btn btn--ghost btn--sm" onclick="viewReport('${escHtml(r.report_path)}')">View</button>`
-        : '—'}</td>
+      <td>${r.proctor_test_id
+        ? `<button class="btn btn--ghost btn--sm" onclick="showProctorCurve('${escHtml(r.proctor_test_id)}')">View Curve</button>`
+        : r.report_path
+          ? `<button class="btn btn--ghost btn--sm" onclick="viewReport('${escHtml(r.report_path)}')">View</button>`
+          : '—'}</td>
       <td>
         <button class="btn btn--ghost btn--sm" onclick='editResult(${JSON.stringify(r)})'>Edit</button>
       </td>
@@ -493,6 +495,11 @@ window.openPanel = function(type) {
     document.getElementById('resultId').value = '';
     document.getElementById('resultPanelTitle').textContent = 'Add Test Result';
   }
+  if (type === 'proctor') {
+    document.getElementById('proctorId').value = '';
+    document.getElementById('proctorPanelTitle').textContent = 'New Proctor Test';
+    renderProctorPointRows(6);
+  }
   document.getElementById(`${type}Panel`).classList.add('open');
 };
 
@@ -501,10 +508,14 @@ window.closePanel = function(type) {
 };
 
 // Close on overlay click
-['project','sample','result'].forEach(type => {
+['project','sample','result','proctor'].forEach(type => {
   document.getElementById(`${type}Panel`)?.addEventListener('click', e => {
     if (e.target === document.getElementById(`${type}Panel`)) closePanel(type);
   });
+});
+document.getElementById('curveModal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('curveModal'))
+    document.getElementById('curveModal').classList.remove('open');
 });
 
 // =====================================================
@@ -525,4 +536,292 @@ function populateSelects() {
   const sampleSel = document.getElementById('resultSample');
   sampleSel.innerHTML = '<option value="">— Select sample —</option>' +
     allSamples.map(s => `<option value="${s.id}">[${escHtml(s.projects?.project_name||'')}] ${escHtml(s.sample_label)}</option>`).join('');
+
+  // Sample select in proctor form
+  const proctorSampleSel = document.getElementById('proctorSample');
+  proctorSampleSel.innerHTML = '<option value="">— Select sample —</option>' +
+    allSamples.map(s => `<option value="${s.id}">[${escHtml(s.projects?.project_name||'')}] ${escHtml(s.sample_label)}</option>`).join('');
+}
+
+// =====================================================
+// PROCTOR COMPACTION TEST (ASTM D698 / D1557)
+// =====================================================
+
+// Least-squares 2nd-degree polynomial fit.
+// pts: [{x, y}, ...] — returns {a, b, c} for y = ax² + bx + c
+function polyFit2(pts) {
+  const n = pts.length;
+  let sx=0, sx2=0, sx3=0, sx4=0, sy=0, sxy=0, sx2y=0;
+  for (const {x, y} of pts) {
+    sx   += x;       sx2  += x*x;     sx3  += x*x*x;   sx4  += x*x*x*x;
+    sy   += y;       sxy  += x*y;     sx2y += x*x*y;
+  }
+  // Augmented matrix for normal equations [sx4 sx3 sx2 | sx2y] etc.
+  const M = [
+    [sx4, sx3, sx2, sx2y],
+    [sx3, sx2, sx,  sxy ],
+    [sx2, sx,  n,   sy  ],
+  ];
+  // Gaussian elimination with partial pivoting
+  for (let col = 0; col < 3; col++) {
+    let maxRow = col;
+    for (let row = col+1; row < 3; row++)
+      if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row;
+    [M[col], M[maxRow]] = [M[maxRow], M[col]];
+    for (let row = col+1; row < 3; row++) {
+      const f = M[row][col] / M[col][col];
+      for (let j = col; j <= 3; j++) M[row][j] -= f * M[col][j];
+    }
+  }
+  // Back-substitution
+  const r = [0, 0, 0];
+  for (let i = 2; i >= 0; i--) {
+    r[i] = M[i][3];
+    for (let j = i+1; j < 3; j++) r[i] -= M[i][j] * r[j];
+    r[i] /= M[i][i];
+  }
+  return { a: r[0], b: r[1], c: r[2] };
+}
+
+// Peak of downward parabola: OMC = -b/(2a), MDD = a·OMC² + b·OMC + c
+function parabolicPeak(a, b, c) {
+  if (a >= 0) return null; // no maximum — invalid data
+  const omc = -b / (2 * a);
+  const mdd = a*omc*omc + b*omc + c;
+  return { omc: +omc.toFixed(2), mdd: +mdd.toFixed(1) };
+}
+
+// Zero Air Voids: γd = Gs·62.4 / (1 + Gs·w/100)
+function zavCurveData(Gs, wMin, wMax) {
+  const pts = [];
+  for (let w = wMin - 1; w <= wMax + 2; w += 0.5)
+    pts.push({ x: +w.toFixed(1), y: +((Gs * 62.4) / (1 + Gs * w / 100)).toFixed(2) });
+  return pts;
+}
+
+// Render 6 blank input rows in the data-points table
+function renderProctorPointRows(count) {
+  const tbody = document.getElementById('proctorPointsBody');
+  tbody.innerHTML = '';
+  for (let i = 1; i <= count; i++) {
+    const style = 'width:100%;padding:.3rem .5rem;border:1px solid var(--clr-border);border-radius:4px;font-size:.85rem;background:var(--clr-bg)';
+    tbody.innerHTML += `
+      <tr>
+        <td style="text-align:center;color:var(--clr-text-muted);border:1px solid var(--clr-border);padding:.3rem">${i}</td>
+        <td style="border:1px solid var(--clr-border);padding:.25rem .35rem">
+          <input type="number" step="0.1" min="0" max="100" class="proctor-mc" placeholder="e.g. 10.5" style="${style}" />
+        </td>
+        <td style="border:1px solid var(--clr-border);padding:.25rem .35rem">
+          <input type="number" step="0.1" min="50" max="200" class="proctor-dd" placeholder="e.g. 115.2" style="${style}" />
+        </td>
+      </tr>`;
+  }
+}
+
+// Open proctor panel for a new entry
+window.openProctorPanel = function() {
+  openPanel('proctor');
+};
+
+// Save proctor test — inserts proctor_tests, proctor_points, and a test_results summary
+document.getElementById('proctorForm')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const submitBtn = document.getElementById('proctorSubmitBtn');
+  submitBtn.textContent = 'Saving…'; submitBtn.disabled = true;
+
+  // Collect valid data points
+  const mcInputs = [...document.querySelectorAll('.proctor-mc')];
+  const ddInputs = [...document.querySelectorAll('.proctor-dd')];
+  const pts = [];
+  mcInputs.forEach((mc, i) => {
+    const x = parseFloat(mc.value);
+    const y = parseFloat(ddInputs[i].value);
+    if (!isNaN(x) && !isNaN(y)) pts.push({ x, y, idx: i + 1 });
+  });
+
+  if (pts.length < 3) {
+    toast('Enter at least 3 data points to fit the curve.', 'error');
+    submitBtn.textContent = 'Save & Generate Curve'; submitBtn.disabled = false;
+    return;
+  }
+
+  // Polynomial fit & peak
+  const { a, b, c } = polyFit2(pts);
+  const peak = parabolicPeak(a, b, c);
+  if (!peak) {
+    toast('Could not find a peak — check your data points (curve must have a maximum).', 'error');
+    submitBtn.textContent = 'Save & Generate Curve'; submitBtn.disabled = false;
+    return;
+  }
+
+  const sampleId   = document.getElementById('proctorSample').value;
+  const standard   = document.getElementById('proctorStandard').value;
+  const moldVol    = parseFloat(document.getElementById('proctorMoldVol').value) || 0.0333;
+  const specGrav   = parseFloat(document.getElementById('proctorSpecGrav').value) || 2.65;
+  const testedDate = document.getElementById('proctorDate').value || null;
+  const technician = document.getElementById('proctorTech').value.trim() || null;
+  const notes      = document.getElementById('proctorNotes').value.trim() || null;
+
+  // 1. Insert proctor_tests row
+  const { data: testRow, error: testErr } = await db.from('proctor_tests').insert({
+    sample_id:        sampleId,
+    standard,
+    mold_volume:      moldVol,
+    spec_gravity:     specGrav,
+    max_dry_density:  peak.mdd,
+    optimum_moisture: peak.omc,
+    technician,
+    tested_date:      testedDate,
+    notes,
+  }).select().single();
+
+  if (testErr) {
+    toast('Error saving proctor test: ' + testErr.message, 'error');
+    submitBtn.textContent = 'Save & Generate Curve'; submitBtn.disabled = false;
+    return;
+  }
+
+  // 2. Insert proctor_points rows
+  const { error: ptsErr } = await db.from('proctor_points').insert(
+    pts.map(p => ({
+      proctor_test_id:  testRow.id,
+      point_number:     p.idx,
+      moisture_content: p.x,
+      dry_density:      p.y,
+    }))
+  );
+  if (ptsErr) {
+    toast('Error saving data points: ' + ptsErr.message, 'error');
+    submitBtn.textContent = 'Save & Generate Curve'; submitBtn.disabled = false;
+    return;
+  }
+
+  // 3. Auto-create a test_results summary row (shows up in the Results table)
+  const testName = standard === 'ASTM D1557' ? 'Modified Proctor Compaction' : 'Standard Proctor Compaction';
+  await db.from('test_results').insert({
+    sample_id:       sampleId,
+    test_name:       testName,
+    standard,
+    result_value:    String(peak.mdd),
+    unit:            'pcf',
+    pass_fail:       'n/a',
+    tested_date:     testedDate,
+    technician,
+    notes:           `MDD: ${peak.mdd} pcf  |  OMC: ${peak.omc}%${notes ? '  |  ' + notes : ''}`,
+    proctor_test_id: testRow.id,
+    updated_at:      new Date().toISOString(),
+  });
+
+  submitBtn.textContent = 'Save & Generate Curve'; submitBtn.disabled = false;
+  toast(`Saved! MDD = ${peak.mdd} pcf @ OMC = ${peak.omc}%`, 'success');
+  closePanel('proctor');
+  loadResults();
+});
+
+// Fetch points and render the compaction curve in the modal
+window.showProctorCurve = async function(proctorTestId) {
+  const [{ data: test, error: tErr }, { data: points, error: pErr }] = await Promise.all([
+    db.from('proctor_tests').select('*').eq('id', proctorTestId).single(),
+    db.from('proctor_points').select('*').eq('proctor_test_id', proctorTestId).order('moisture_content'),
+  ]);
+
+  if (tErr || pErr || !points?.length) {
+    toast('Could not load curve data.', 'error');
+    return;
+  }
+
+  document.getElementById('curveModal').classList.add('open');
+  document.getElementById('curveModalTitle').textContent =
+    `${test.standard} — MDD: ${test.max_dry_density} pcf  |  OMC: ${test.optimum_moisture}%`;
+
+  renderProctorChart(
+    'curveCanvas',
+    test,
+    points.map(p => ({ x: p.moisture_content, y: p.dry_density }))
+  );
+};
+
+// Shared chart renderer (used by both admin and, via portal, by clients)
+function renderProctorChart(canvasId, test, pts) {
+  const { a, b, c } = polyFit2(pts);
+  const wMin = Math.min(...pts.map(p => p.x));
+  const wMax = Math.max(...pts.map(p => p.x));
+
+  // Smooth fitted curve
+  const curvePts = [];
+  for (let w = wMin - 1.5; w <= wMax + 1.5; w += 0.2)
+    curvePts.push({ x: +w.toFixed(2), y: +(a*w*w + b*w + c).toFixed(2) });
+
+  const zavPts = zavCurveData(test.spec_gravity, wMin, wMax);
+
+  const canvas = document.getElementById(canvasId);
+  if (canvas._chart) canvas._chart.destroy();
+
+  canvas._chart = new Chart(canvas, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Lab Points',
+          data: pts,
+          backgroundColor: '#1e40af',
+          pointRadius: 6,
+          showLine: false,
+          order: 3,
+        },
+        {
+          label: 'Compaction Curve (polynomial fit)',
+          data: curvePts,
+          borderColor: '#1e40af',
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          showLine: true,
+          tension: 0.3,
+          order: 2,
+        },
+        {
+          label: `Zero Air Voids (Gs = ${test.spec_gravity})`,
+          data: zavPts,
+          borderColor: '#dc2626',
+          borderDash: [6, 3],
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          showLine: true,
+          order: 4,
+        },
+        {
+          label: `MDD = ${test.max_dry_density} pcf  @  OMC = ${test.optimum_moisture}%`,
+          data: [{ x: test.optimum_moisture, y: test.max_dry_density }],
+          backgroundColor: '#16a34a',
+          borderColor: '#16a34a',
+          pointRadius: 10,
+          pointStyle: 'crossRot',
+          showLine: false,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 16 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `MC: ${ctx.raw.x}%,  γd: ${ctx.raw.y} pcf`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Moisture Content (%)' },
+        },
+        y: {
+          type: 'linear',
+          title: { display: true, text: 'Dry Unit Weight (pcf)' },
+        },
+      },
+    },
+  });
 }

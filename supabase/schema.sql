@@ -231,6 +231,73 @@ create policy "reports: client select"
   );
 
 -- =====================================================
+-- PROCTOR COMPACTION TESTS (ASTM D698 / D1557)
+-- One proctor_test per sample test; one proctor_point
+-- per compaction data point (typically 5-6 per test).
+-- =====================================================
+create table if not exists public.proctor_tests (
+  id               uuid primary key default gen_random_uuid(),
+  sample_id        uuid references public.samples(id) on delete cascade,
+  standard         text not null default 'ASTM D698'
+                   check (standard in ('ASTM D698','ASTM D1557')),
+  mold_volume      numeric not null default 0.0333,  -- ft³
+  spec_gravity     numeric not null default 2.65,    -- Gs for ZAV curve
+  max_dry_density  numeric,                          -- pcf, auto-calculated
+  optimum_moisture numeric,                          -- %, auto-calculated
+  technician       text,
+  tested_date      date,
+  notes            text,
+  created_at       timestamptz default now(),
+  updated_at       timestamptz default now()
+);
+
+create table if not exists public.proctor_points (
+  id               uuid primary key default gen_random_uuid(),
+  proctor_test_id  uuid references public.proctor_tests(id) on delete cascade,
+  point_number     int not null,
+  moisture_content numeric not null,  -- %
+  dry_density      numeric not null,  -- pcf
+  created_at       timestamptz default now()
+);
+
+-- Link test_results rows back to their proctor test (nullable)
+alter table public.test_results
+  add column if not exists proctor_test_id uuid
+  references public.proctor_tests(id) on delete set null;
+
+-- RLS
+alter table public.proctor_tests  enable row level security;
+alter table public.proctor_points enable row level security;
+
+create policy "proctor_tests: admin all"
+  on public.proctor_tests for all using (public.is_admin());
+
+create policy "proctor_tests: client select"
+  on public.proctor_tests for select using (
+    exists (
+      select 1 from public.samples s
+      join public.projects p on p.id = s.project_id
+      where s.id = proctor_tests.sample_id
+        and p.client_id = auth.uid()
+    )
+  );
+
+create policy "proctor_points: admin all"
+  on public.proctor_points for all using (public.is_admin());
+
+create policy "proctor_points: client select"
+  on public.proctor_points for select using (
+    exists (
+      select 1
+      from public.proctor_tests pt
+      join public.samples s  on s.id  = pt.sample_id
+      join public.projects p on p.id  = s.project_id
+      where pt.id = proctor_points.proctor_test_id
+        and p.client_id = auth.uid()
+    )
+  );
+
+-- =====================================================
 -- SEED: Create your first admin user
 -- 1. Sign the user up normally via the portal login
 -- 2. Then run this to promote them to admin:

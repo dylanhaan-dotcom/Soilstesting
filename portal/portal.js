@@ -322,11 +322,18 @@ async function openSamplePanel(sampleId, label) {
         ${r.technician   ? `<span>Tech: ${escHtml(r.technician)}</span>` : ''}
       </div>
       ${r.notes ? `<p style="font-size:.83rem;color:var(--clr-text-muted);margin-top:.5rem">${escHtml(r.notes)}</p>` : ''}
-      ${r.report_path
-        ? `<button class="btn btn--ghost btn--sm" style="margin-top:.75rem" onclick="downloadReport('${escHtml(r.report_path)}','${escHtml(r.test_name)}')">
-             Download Report (PDF)
-           </button>`
-        : ''}
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
+        ${r.proctor_test_id
+          ? `<button class="btn btn--ghost btn--sm" onclick="showPortalProctorCurve('${escHtml(r.proctor_test_id)}')">
+               View Compaction Curve
+             </button>`
+          : ''}
+        ${r.report_path
+          ? `<button class="btn btn--ghost btn--sm" onclick="downloadReport('${escHtml(r.report_path)}','${escHtml(r.test_name)}')">
+               Download Report (PDF)
+             </button>`
+          : ''}
+      </div>
     </div>`).join('');
 }
 
@@ -353,8 +360,9 @@ document.getElementById('samplePanel')?.addEventListener('click', e => {
 });
 
 // Expose for inline onclick
-window.openSamplePanel = openSamplePanel;
-window.downloadReport  = downloadReport;
+window.openSamplePanel        = openSamplePanel;
+window.downloadReport         = downloadReport;
+window.showPortalProctorCurve = showPortalProctorCurve;
 
 // =====================================================
 // AUTH STATE LISTENER
@@ -377,3 +385,141 @@ function formatDate(d) {
   const dt = new Date(d + 'T00:00:00');
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+// =====================================================
+// PROCTOR COMPACTION CURVE (portal view)
+// =====================================================
+
+async function showPortalProctorCurve(proctorTestId) {
+  const [{ data: test, error: tErr }, { data: points, error: pErr }] = await Promise.all([
+    db.from('proctor_tests').select('*').eq('id', proctorTestId).single(),
+    db.from('proctor_points').select('*').eq('proctor_test_id', proctorTestId).order('moisture_content'),
+  ]);
+
+  if (tErr || pErr || !points?.length) {
+    toast('Could not load curve data.', 'error');
+    return;
+  }
+
+  document.getElementById('portalCurveTitle').textContent =
+    `${test.standard} — MDD: ${test.max_dry_density} pcf  |  OMC: ${test.optimum_moisture}%`;
+  document.getElementById('portalCurveModal').classList.add('open');
+
+  const pts = points.map(p => ({ x: p.moisture_content, y: p.dry_density }));
+  portalRenderProctorChart('portalCurveCanvas', test, pts);
+}
+
+// 2nd-degree polynomial least-squares fit
+function portalPolyFit2(pts) {
+  const n = pts.length;
+  let sx=0, sx2=0, sx3=0, sx4=0, sy=0, sxy=0, sx2y=0;
+  for (const {x, y} of pts) {
+    sx += x; sx2 += x*x; sx3 += x*x*x; sx4 += x*x*x*x;
+    sy += y; sxy += x*y; sx2y += x*x*y;
+  }
+  const M = [
+    [sx4, sx3, sx2, sx2y],
+    [sx3, sx2, sx,  sxy ],
+    [sx2, sx,  n,   sy  ],
+  ];
+  for (let col = 0; col < 3; col++) {
+    let maxRow = col;
+    for (let row = col+1; row < 3; row++)
+      if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row;
+    [M[col], M[maxRow]] = [M[maxRow], M[col]];
+    for (let row = col+1; row < 3; row++) {
+      const f = M[row][col] / M[col][col];
+      for (let j = col; j <= 3; j++) M[row][j] -= f * M[col][j];
+    }
+  }
+  const r = [0, 0, 0];
+  for (let i = 2; i >= 0; i--) {
+    r[i] = M[i][3];
+    for (let j = i+1; j < 3; j++) r[i] -= M[i][j] * r[j];
+    r[i] /= M[i][i];
+  }
+  return { a: r[0], b: r[1], c: r[2] };
+}
+
+function portalRenderProctorChart(canvasId, test, pts) {
+  const { a, b, c } = portalPolyFit2(pts);
+  const wMin = Math.min(...pts.map(p => p.x));
+  const wMax = Math.max(...pts.map(p => p.x));
+
+  const curvePts = [];
+  for (let w = wMin - 1.5; w <= wMax + 1.5; w += 0.2)
+    curvePts.push({ x: +w.toFixed(2), y: +(a*w*w + b*w + c).toFixed(2) });
+
+  const zavPts = [];
+  for (let w = wMin - 1; w <= wMax + 2; w += 0.5)
+    zavPts.push({ x: +w.toFixed(1), y: +((test.spec_gravity * 62.4) / (1 + test.spec_gravity * w / 100)).toFixed(2) });
+
+  const canvas = document.getElementById(canvasId);
+  if (canvas._chart) canvas._chart.destroy();
+
+  canvas._chart = new Chart(canvas, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Lab Points',
+          data: pts,
+          backgroundColor: '#1e40af',
+          pointRadius: 6,
+          showLine: false,
+          order: 3,
+        },
+        {
+          label: 'Compaction Curve (polynomial fit)',
+          data: curvePts,
+          borderColor: '#1e40af',
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          showLine: true,
+          tension: 0.3,
+          order: 2,
+        },
+        {
+          label: `Zero Air Voids (Gs = ${test.spec_gravity})`,
+          data: zavPts,
+          borderColor: '#dc2626',
+          borderDash: [6, 3],
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          showLine: true,
+          order: 4,
+        },
+        {
+          label: `MDD = ${test.max_dry_density} pcf  @  OMC = ${test.optimum_moisture}%`,
+          data: [{ x: test.optimum_moisture, y: test.max_dry_density }],
+          backgroundColor: '#16a34a',
+          borderColor: '#16a34a',
+          pointRadius: 10,
+          pointStyle: 'crossRot',
+          showLine: false,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 14 } },
+        tooltip: {
+          callbacks: { label: ctx => `MC: ${ctx.raw.x}%,  γd: ${ctx.raw.y} pcf` },
+        },
+      },
+      scales: {
+        x: { type: 'linear', title: { display: true, text: 'Moisture Content (%)' } },
+        y: { type: 'linear', title: { display: true, text: 'Dry Unit Weight (pcf)' } },
+      },
+    },
+  });
+}
+
+// Close portal curve modal on overlay click
+document.getElementById('portalCurveModal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('portalCurveModal'))
+    document.getElementById('portalCurveModal').classList.remove('open');
+});
